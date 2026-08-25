@@ -192,3 +192,151 @@ export async function saveBasicProfileAction(
     '基本プロフィールを保存しました。'
   )
 }
+
+function getFormValues(
+  formData: FormData,
+  key: string
+) {
+  return formData
+    .getAll(key)
+    .filter(
+      (value): value is string =>
+        typeof value === 'string'
+    )
+}
+
+function redirectFromLanguages(
+  key: 'error' | 'message',
+  message: string
+): never {
+  const params = new URLSearchParams({
+    [key]: message,
+  })
+
+  redirect(`/profile/languages?${params.toString()}`)
+}
+
+export async function saveProfileLanguagesAction(
+  formData: FormData
+) {
+  const nativeLanguageIds = new Set(
+    getFormValues(formData, 'nativeLanguageIds')
+  )
+  const speakingLanguageIds = new Set(
+    getFormValues(formData, 'speakingLanguageIds')
+  )
+  const learningLanguageIds = new Set(
+    getFormValues(formData, 'learningLanguageIds')
+  )
+  const interactionLanguageIds = new Set(
+    getFormValues(
+      formData,
+      'interactionLanguageIds'
+    )
+  )
+
+  if (nativeLanguageIds.size === 0) {
+    redirectFromLanguages(
+      'error',
+      '母語を1つ以上選択してください。'
+    )
+  }
+
+  const selectedLanguageIds = [
+    ...new Set([
+      ...nativeLanguageIds,
+      ...speakingLanguageIds,
+      ...learningLanguageIds,
+      ...interactionLanguageIds,
+    ]),
+  ]
+
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    redirect('/login')
+  }
+
+  const {
+    data: profile,
+    error: profileError,
+  } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('user_id', user.id)
+    .single()
+
+  if (profileError || !profile) {
+    const params = new URLSearchParams({
+      error:
+        '先に基本プロフィールを保存してください。',
+    })
+
+    redirect(`/profile/edit?${params.toString()}`)
+  }
+
+  const {
+    data: activeLanguages,
+    error: languagesError,
+  } = await supabase
+    .from('languages')
+    .select('id')
+    .in('id', selectedLanguageIds)
+    .eq('is_active', true)
+
+  if (
+    languagesError ||
+    !activeLanguages ||
+    activeLanguages.length !==
+      selectedLanguageIds.length
+  ) {
+    redirectFromLanguages(
+      'error',
+      '選択された言語を確認できませんでした。'
+    )
+  }
+
+  const { error: deleteError } = await supabase
+    .from('profile_languages')
+    .delete()
+    .eq('profile_id', profile.id)
+
+  if (deleteError) {
+    redirectFromLanguages(
+      'error',
+      `以前の言語設定を更新できませんでした: ${deleteError.message}`
+    )
+  }
+
+  const languageRows = selectedLanguageIds.map(
+    (languageId) => ({
+      profile_id: profile.id,
+      language_id: languageId,
+      is_native: nativeLanguageIds.has(languageId),
+      can_speak: speakingLanguageIds.has(languageId),
+      is_learning: learningLanguageIds.has(languageId),
+      wants_to_interact:
+        interactionLanguageIds.has(languageId),
+    })
+  )
+
+  const { error: insertError } = await supabase
+    .from('profile_languages')
+    .insert(languageRows)
+
+  if (insertError) {
+    redirectFromLanguages(
+      'error',
+      `言語設定を保存できませんでした: ${insertError.message}`
+    )
+  }
+
+  redirectFromLanguages(
+    'message',
+    '言語設定を保存しました。'
+  )
+}
