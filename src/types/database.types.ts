@@ -482,6 +482,27 @@ export type Database = {
       }
     }
     Functions: {
+      bootstrap_current_user: {
+        Args: never
+        Returns: {
+          account_status: string
+          account_type: string
+          created_at: string
+          current_suspension_reason: string | null
+          id: string
+          role: string
+          student_number: string | null
+          suspended_at: string | null
+          suspended_by_user_id: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "app_users"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       get_public_profiles: {
         Args: { p_limit?: number; p_profile_ids?: string[] }
         Returns: {
