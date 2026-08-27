@@ -117,12 +117,19 @@ export default async function LanguagesPage({
             </p>
           </div>
 
-          <div className="flex gap-4 text-sm">
+          <div className="flex flex-wrap gap-4 text-sm">
             <Link
               href="/profile/edit"
               className="text-gray-700 underline"
             >
               基本プロフィール
+            </Link>
+
+            <Link
+              href="/profile/tags"
+              className="text-gray-700 underline"
+            >
+              タグ設定
             </Link>
 
             <Link
@@ -247,9 +254,14 @@ export default async function LanguagesPage({
           </button>
         </form>
 
-        <p className="mt-6 text-sm text-gray-500">
-          タグと公開設定は次のステップで追加します。
-        </p>
+        <div className="mt-6 flex justify-end">
+          <Link
+            href="/profile/tags"
+            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50"
+          >
+            タグ設定へ進む
+          </Link>
+        </div>
       </div>
     </main>
   )
