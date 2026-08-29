@@ -116,7 +116,12 @@ export default async function TagsPage({
             >
               言語設定
             </Link>
-
+<Link
+  href="/profile/publication"
+  className="text-gray-700 underline"
+>
+  公開設定
+</Link>
             <Link
               href="/account"
               className="text-gray-700 underline"
