@@ -5,7 +5,8 @@ import {
   Type,
 } from '@google/genai'
 
-const GEMINI_MODEL = 'gemini-2.5-flash-lite'
+const GEMINI_MODEL =
+  'gemini-2.5-flash-lite'
 const MAX_SEARCH_QUERY_LENGTH = 200
 const MAX_MAIN_CONDITIONS = 5
 
@@ -29,6 +30,40 @@ export type LanguageRelation =
 
 export type StudentType =
   (typeof STUDENT_TYPES)[number]
+
+const STUDENT_TYPE_MARKERS: Record<
+  StudentType,
+  readonly string[]
+> = {
+  regular: [
+    '正規学生',
+    '正規生',
+    'regular student',
+    'degree student',
+  ],
+  exchange: [
+    '交換留学生',
+    '交換学生',
+    '留学生',
+    'exchange student',
+    'visiting student',
+  ],
+  graduate: [
+    '大学院生',
+    '修士課程',
+    '博士課程',
+    'graduate student',
+    "master's student",
+    'masters student',
+    'doctoral student',
+    'phd student',
+  ],
+  other: [
+    'その他の学生',
+    'その他区分',
+    'other student',
+  ],
+}
 
 export type SearchCondition = {
   label: string
@@ -155,6 +190,8 @@ const searchQueryJsonSchema = {
               'other',
             ],
           },
+          description:
+            '検索文に現在の学生区分が明示されている場合だけ設定する',
         },
         cohort_numbers: {
           type: Type.ARRAY,
@@ -219,6 +256,32 @@ function normalizeTerms(
   )
 }
 
+function normalizeMarkerText(
+  value: string
+) {
+  return value
+    .normalize('NFKC')
+    .trim()
+    .toLocaleLowerCase('ja')
+    .replace(/\s+/g, ' ')
+}
+
+function searchQueryExplicitlyMentionsStudentType(
+  searchQuery: string,
+  studentType: StudentType
+) {
+  const normalizedQuery =
+    normalizeMarkerText(searchQuery)
+
+  return STUDENT_TYPE_MARKERS[
+    studentType
+  ].some((marker) =>
+    normalizedQuery.includes(
+      normalizeMarkerText(marker)
+    )
+  )
+}
+
 function isLanguageRelation(
   value: unknown
 ): value is LanguageRelation {
@@ -253,7 +316,9 @@ function parseCondition(
     !value.label.trim() ||
     !isStringArray(value.direct_terms) ||
     !isStringArray(value.equivalent_terms) ||
-    !isStringArray(value.close_concept_terms)
+    !isStringArray(
+      value.close_concept_terms
+    )
   ) {
     return null
   }
@@ -293,7 +358,8 @@ function parseNullableInteger(
 export async function parseSearchQuery(
   searchQuery: string
 ): Promise<ParsedSearchQuery> {
-  const normalizedQuery = searchQuery.trim()
+  const normalizedQuery =
+    searchQuery.trim()
 
   if (!normalizedQuery) {
     throw new Error(
@@ -310,7 +376,8 @@ export async function parseSearchQuery(
     )
   }
 
-  const apiKey = process.env.GEMINI_API_KEY
+  const apiKey =
+    process.env.GEMINI_API_KEY
 
   if (!apiKey) {
     throw new Error(
@@ -342,7 +409,19 @@ language_conditions:
 
 tag_conditions:
 - 興味、経験、活動、専攻、交流テーマを入れる
+- 留学先、留学希望、海外経験、国際交流への関心も
+  tag_conditionsとして扱う
 - 人物の性格や能力を勝手に推測しない
+
+student_types:
+- 検索対象者の現在の学生区分だけを表す
+- 検索文に学生区分が明示されている場合だけ設定する
+- 「正規学生」「交換留学生」「大学院生」などの
+  明示がなければ空配列にする
+- 「留学希望」「海外留学」「特定の国への留学」
+  「交換留学に興味がある」という表現だけでは
+  exchangeを設定しない
+- 留学への希望や関心はtag_conditionsに入れる
 
 一致語の分類:
 - direct_terms:
@@ -372,16 +451,20 @@ tag_conditions:
 ${JSON.stringify(normalizedQuery)}
 `
 
-  const response = await ai.models.generateContent({
-    model: GEMINI_MODEL,
-    contents: prompt,
-    config: {
-      responseMimeType: 'application/json',
-      responseSchema: searchQueryJsonSchema,
-    },
-  })
+  const response =
+    await ai.models.generateContent({
+      model: GEMINI_MODEL,
+      contents: prompt,
+      config: {
+        responseMimeType:
+          'application/json',
+        responseSchema:
+          searchQueryJsonSchema,
+      },
+    })
 
-  const responseText = response.text?.trim()
+  const responseText =
+    response.text?.trim()
 
   if (!responseText) {
     throw new Error(
@@ -423,7 +506,9 @@ ${JSON.stringify(normalizedQuery)}
         if (
           !condition ||
           !isRecord(value) ||
-          !isLanguageRelation(value.relation)
+          !isLanguageRelation(
+            value.relation
+          )
         ) {
           return null
         }
@@ -463,11 +548,15 @@ ${JSON.stringify(normalizedQuery)}
   const filters = parsed.filters
 
   if (
-    !Array.isArray(filters.student_types) ||
+    !Array.isArray(
+      filters.student_types
+    ) ||
     !filters.student_types.every(
       isStudentType
     ) ||
-    !Array.isArray(filters.cohort_numbers) ||
+    !Array.isArray(
+      filters.cohort_numbers
+    ) ||
     !filters.cohort_numbers.every(
       Number.isInteger
     ) ||
@@ -480,18 +569,24 @@ ${JSON.stringify(normalizedQuery)}
     )
   }
 
-  const ageMin = parseNullableInteger(
-    filters.age_min
-  )
-  const ageMax = parseNullableInteger(
-    filters.age_max
-  )
+  const ageMin =
+    parseNullableInteger(
+      filters.age_min
+    )
+  const ageMax =
+    parseNullableInteger(
+      filters.age_max
+    )
 
   if (
-    (ageMin !== null &&
-      (ageMin < 15 || ageMin > 100)) ||
-    (ageMax !== null &&
-      (ageMax < 15 || ageMax > 100)) ||
+    (
+      ageMin !== null &&
+      (ageMin < 15 || ageMin > 100)
+    ) ||
+    (
+      ageMax !== null &&
+      (ageMax < 15 || ageMax > 100)
+    ) ||
     (
       ageMin !== null &&
       ageMax !== null &&
@@ -503,26 +598,60 @@ ${JSON.stringify(normalizedQuery)}
     )
   }
 
+  const studentTypes =
+    filters.student_types.filter(
+      (studentType) =>
+        searchQueryExplicitlyMentionsStudentType(
+          normalizedQuery,
+          studentType
+        )
+    )
+
+  const cohortNumbers =
+    filters.cohort_numbers
+      .filter(
+        (value) =>
+          value > 0 && value <= 100
+      )
+      .slice(0, 10)
+
+  const exchangeGradeLevels =
+    normalizeTerms(
+      filters.exchange_grade_levels
+    )
+
+  const needsTagFallback =
+    languageConditions.length === 0 &&
+    tagConditions.length === 0 &&
+    ageMin === null &&
+    ageMax === null &&
+    studentTypes.length === 0 &&
+    cohortNumbers.length === 0 &&
+    exchangeGradeLevels.length === 0
+
+  const finalTagConditions =
+    needsTagFallback
+      ? [
+          {
+            label: normalizedQuery,
+            directTerms: [
+              normalizedQuery,
+            ],
+            equivalentTerms: [],
+            closeConceptTerms: [],
+          },
+        ]
+      : tagConditions
+
   return {
     languageConditions,
-    tagConditions,
+    tagConditions: finalTagConditions,
     filters: {
       ageMin,
       ageMax,
-      studentTypes:
-        filters.student_types,
-      cohortNumbers:
-        filters.cohort_numbers
-          .filter(
-            (value) =>
-              value > 0 &&
-              value <= 100
-          )
-          .slice(0, 10),
-      exchangeGradeLevels:
-        normalizeTerms(
-          filters.exchange_grade_levels
-        ),
+      studentTypes,
+      cohortNumbers,
+      exchangeGradeLevels,
     },
   }
 }
