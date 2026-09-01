@@ -50,6 +50,13 @@ type TermMatch = {
   matchedValue: string
 }
 
+type ValueMatcher = (
+  profileValue: string,
+  searchTerm: string
+) => boolean
+
+const MIN_PARTIAL_TAG_TERM_LENGTH = 2
+
 function normalizeText(value: string) {
   return value
     .normalize('NFKC')
@@ -68,11 +75,54 @@ function valuesMatch(
   )
 }
 
+function tagValuesMatch(
+  profileValue: string,
+  searchTerm: string
+) {
+  const normalizedProfileValue =
+    normalizeText(profileValue)
+  const normalizedSearchTerm =
+    normalizeText(searchTerm)
+
+  if (
+    !normalizedProfileValue ||
+    !normalizedSearchTerm
+  ) {
+    return false
+  }
+
+  if (
+    normalizedProfileValue ===
+    normalizedSearchTerm
+  ) {
+    return true
+  }
+
+  if (
+    normalizedProfileValue.length <
+      MIN_PARTIAL_TAG_TERM_LENGTH ||
+    normalizedSearchTerm.length <
+      MIN_PARTIAL_TAG_TERM_LENGTH
+  ) {
+    return false
+  }
+
+  return (
+    normalizedProfileValue.includes(
+      normalizedSearchTerm
+    ) ||
+    normalizedSearchTerm.includes(
+      normalizedProfileValue
+    )
+  )
+}
+
 function findMatchForTerms(
   profileValues: string[],
   directTerms: string[],
   equivalentTerms: string[],
-  closeConceptTerms: string[]
+  closeConceptTerms: string[],
+  valueMatcher: ValueMatcher = valuesMatch
 ): TermMatch | null {
   const termGroups: Array<{
     level: MatchLevel
@@ -96,7 +146,7 @@ function findMatchForTerms(
     for (const profileValue of profileValues) {
       const matched = group.terms.some(
         (term) =>
-          valuesMatch(profileValue, term)
+          valueMatcher(profileValue, term)
       )
 
       if (matched) {
@@ -178,7 +228,8 @@ function matchTagCondition(
     profile.tags,
     condition.directTerms,
     condition.equivalentTerms,
-    condition.closeConceptTerms
+    condition.closeConceptTerms,
+    tagValuesMatch
   )
 
   if (!match) {
