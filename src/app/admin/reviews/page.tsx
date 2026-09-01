@@ -222,6 +222,12 @@ export default async function AdminReviewsPage({
             </div>
 
             <nav className="flex flex-wrap gap-x-6 gap-y-3 font-semibold">
+                              <Link
+                href="/admin/users"
+                className="underline decoration-slate-300 underline-offset-4"
+              >
+                ユーザー管理
+              </Link>
               <Link
                 href="/editor/tags"
                 className="underline decoration-slate-300 underline-offset-4"
