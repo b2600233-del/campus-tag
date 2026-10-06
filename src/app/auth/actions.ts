@@ -180,11 +180,21 @@ export async function loginAction(formData: FormData) {
     .eq('id', data.user.id)
     .single()
 
-  if (
-    accountError ||
-    !appUser ||
-    appUser.account_status !== 'active'
-  ) {
+  if (accountError || !appUser) {
+    await supabase.auth.signOut()
+
+    redirectWithMessage(
+      '/login',
+      'error',
+      'このCampus Tagアカウントは現在利用できません。'
+    )
+  }
+
+  if (appUser.account_status === 'suspended') {
+    redirect('/account')
+  }
+
+  if (appUser.account_status !== 'active') {
     await supabase.auth.signOut()
 
     redirectWithMessage(

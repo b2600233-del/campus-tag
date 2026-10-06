@@ -90,11 +90,24 @@ export async function GET(request: NextRequest) {
       .eq('id', user.id)
       .single()
 
-  if (
-    accountError ||
-    !appUser ||
-    appUser.account_status !== 'active'
-  ) {
+  if (accountError || !appUser) {
+    await supabase.auth.signOut()
+
+    return NextResponse.redirect(
+      new URL(
+        '/login?error=このCampus Tagアカウントは現在利用できません。',
+        request.url
+      )
+    )
+  }
+
+  if (appUser.account_status === 'suspended') {
+    return NextResponse.redirect(
+      new URL('/account', request.url)
+    )
+  }
+
+  if (appUser.account_status !== 'active') {
     await supabase.auth.signOut()
 
     return NextResponse.redirect(
