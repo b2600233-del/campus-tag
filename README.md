@@ -105,6 +105,8 @@ Ride Tagなどの追加マッチング機能は、将来の拡張候補として
 - 必須プロフィール情報が不足しているユーザーを検索対象から除外
 - 母語と公開可能タグが設定されていないプロフィールを検索対象から除外
 - Gemini APIキーとSupabase秘密鍵をサーバー側だけで使用
+- 通常のタグ追加はログイン中ユーザーのセッションと専用RPCで処理し、Supabase秘密鍵を使用しない
+- Proxyで保護ルートへの未認証アクセスとロール不足を共通制御
 
 `SUPABASE_SECRET_KEY` と `GEMINI_API_KEY` を、ブラウザー側のコードやGitリポジトリへ公開しないでください。
 
@@ -120,12 +122,26 @@ Ride Tagなどの追加マッチング機能は、将来の拡張候補として
 | デプロイ | Vercel |
 | バージョン管理 | Git、GitHub |
 
+AIモデルには `gemini-2.5-flash-lite` を採用しています。今回のMVPで必要な構造化出力に対応しながら、応答速度とコストを抑えやすく、無料枠でも動作確認しやすいためです。
+
+### AI利用制限
+
+AI APIの過剰利用と意図しない費用発生を防ぐため、ユーザー単位で次の制限をデータベース側に設けています。日次回数は日本時間の日付でリセットされます。
+
+| 機能 | 1日あたりの上限 | クールダウン |
+| --- | ---: | ---: |
+| 自然文による学生検索 | 50回 | 3秒 |
+| AIタグ候補の生成・再生成 | 10回 | 10秒 |
+| タグの安全確認 | 上限なし（利用記録のみ） | なし |
+
+タグの安全確認は公開可否の判定に必要なため、回数上限を設定せず利用状況だけを記録します。
+
 ## アーキテクチャ
 
 ```mermaid
 flowchart LR
-  Browser[Browser] --> Proxy[proxy.ts\nセッション更新]
-  Proxy --> Page[Next.js Page\n認証・ロール確認]
+  Browser[Browser] --> Proxy[src/proxy.ts\nセッション・ルート保護]
+  Proxy --> Page[Next.js Page\n最終的な認証・ロール確認]
   Page --> Action[Server Action]
   Action --> Gemini[Google Gemini API]
   Action --> RPC[Supabase\nSecurity Definer RPC]
@@ -133,7 +149,7 @@ flowchart LR
   RLS --> DB[(Campus Tag DB)]
 ```
 
-ブラウザーからの更新処理はServer Actionを経由します。認証・ロール確認をページとServer Actionで行い、重要な権限判定とデータ整合性はSupabaseのSecurity Definer RPC、RLS、データベース制約で保証します。Gemini APIキーとSupabase秘密鍵はサーバー側だけで使用します。
+ブラウザーからの更新処理はServer Actionを経由します。Proxyで保護ルートへのアクセスを早期判定し、ページとServer Actionでも認証・ロールを再確認します。重要な権限判定とデータ整合性はSupabaseのSecurity Definer RPC、RLS、データベース制約で保証します。Gemini APIキーとSupabase秘密鍵はサーバー側だけで使用します。
 
 ## 環境変数
 
@@ -211,6 +227,10 @@ npm.cmd run dev
 - Editor用タグ審査関数
 - Admin用最終審査関数
 - Admin用ユーザー管理関数
+- 本人向け修正依頼取得関数
+- 通常タグ追加用の認証済みユーザー専用関数
+- AI利用回数・クールダウン管理関数
+- Proxy用の本人ロール・アカウント状態取得関数
 
 新しい、または操作権限のあるSupabaseプロジェクトへ適用する場合：
 
@@ -294,12 +314,14 @@ npm.cmd run build
 - ログインとログアウト
 - 認証後のアカウント画面への移動
 - 未認証状態での管理画面アクセス防止
+- Proxyによるロール不足ユーザーの保護ルートアクセス防止
 - 基本プロフィール・言語・タグ・公開設定の表示
 - Geminiによるタグの安全判定
 - 公開可能タグの保存
 - 言語検索
 - タグ検索
 - 自然文による検索
+- ユーザー単位のAI利用回数・クールダウン制御
 - 学生区分フィルター
 - Editor画面
 - Admin審査画面
