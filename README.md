@@ -38,6 +38,7 @@ Ride Tagなどの追加マッチング機能は、将来の拡張候補として
   - 交流したい
 - プロフィール公開・非公開設定
 - タグの追加、一覧表示、削除
+- プロフィール内容に基づくAIタグ候補の生成・再生成・選択保存
 - タグの重複防止、登録数制限、文字数制限
 
 ### Geminiによるタグ安全確認
@@ -76,6 +77,12 @@ Ride Tagなどの追加マッチング機能は、将来の拡張候補として
 - 自分自身に対する危険なロール変更・停止操作の防止
 - Adminだけが管理画面と管理用処理へアクセス可能
 
+### 修正依頼と停止中アカウント
+
+- Adminから本人へ送られた修正依頼をアカウント画面に表示
+- 停止中アカウントにも状態、停止理由、修正依頼を表示
+- 停止中は通常機能へのメニューを非表示
+
 ## ロール
 
 | ロール | 主な権限 |
@@ -113,6 +120,21 @@ Ride Tagなどの追加マッチング機能は、将来の拡張候補として
 | デプロイ | Vercel |
 | バージョン管理 | Git、GitHub |
 
+## アーキテクチャ
+
+```mermaid
+flowchart LR
+  Browser[Browser] --> Proxy[proxy.ts\nセッション更新]
+  Proxy --> Page[Next.js Page\n認証・ロール確認]
+  Page --> Action[Server Action]
+  Action --> Gemini[Google Gemini API]
+  Action --> RPC[Supabase\nSecurity Definer RPC]
+  RPC --> RLS[PostgreSQL\nRLS・制約]
+  RLS --> DB[(Campus Tag DB)]
+```
+
+ブラウザーからの更新処理はServer Actionを経由します。認証・ロール確認をページとServer Actionで行い、重要な権限判定とデータ整合性はSupabaseのSecurity Definer RPC、RLS、データベース制約で保証します。Gemini APIキーとSupabase秘密鍵はサーバー側だけで使用します。
+
 ## 環境変数
 
 `.env.example` を `.env.local` へコピーし、各サービスから取得した値を設定します。
@@ -130,7 +152,7 @@ SUPABASE_SECRET_KEY=
 | --- | --- | --- |
 | `NEXT_PUBLIC_SUPABASE_URL` | SupabaseプロジェクトURL | 可 |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Supabase公開用キー | 可 |
-| `GEMINI_API_KEY` | タグ判定・検索条件解析 | 不可 |
+| `GEMINI_API_KEY` | タグ候補生成・タグ判定・検索条件解析 | 不可 |
 | `SUPABASE_SECRET_KEY` | サーバー側の管理処理 | 不可 |
 
 実際の値を含む `.env.local` はGitへコミットしないでください。

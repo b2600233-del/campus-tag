@@ -2,10 +2,46 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 
 import {
+  adoptProfileTagCandidatesAction,
   deleteProfileTagAction,
+  generateProfileTagCandidatesAction,
   saveProfileTagAction,
 } from '@/app/profile/tags/actions'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
+
+type StoredTagCandidate = {
+  candidate_id: string
+  tag_text: string
+}
+
+function readStoredCandidates(
+  value: unknown,
+): StoredTagCandidate[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value.flatMap((item) => {
+    if (
+      typeof item !== 'object' ||
+      item === null ||
+      typeof (item as Record<string, unknown>).candidate_id !==
+        'string' ||
+      typeof (item as Record<string, unknown>).tag_text !== 'string'
+    ) {
+      return []
+    }
+
+    return [
+      {
+        candidate_id: (item as Record<string, string>)
+          .candidate_id,
+        tag_text: (item as Record<string, string>).tag_text,
+      },
+    ]
+  })
+}
 
 type TagsPageProps = {
   searchParams: Promise<{
@@ -83,6 +119,22 @@ export default async function TagsPage({
     0,
     12 - tags.length
   )
+
+  const admin = createAdminClient()
+  const { data: candidateBatch } = await admin
+    .from('ai_tag_regeneration_batches')
+    .select('id, candidate_payload, expires_at')
+    .eq('user_id', user.id)
+    .eq('profile_id', profile.id)
+    .is('consumed_at', null)
+    .gt('expires_at', new Date().toISOString())
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  const candidates = candidateBatch
+    ? readStoredCandidates(candidateBatch.candidate_payload)
+    : []
 
   return (
     <main className="min-h-screen bg-gray-50 px-4 py-10">
@@ -184,6 +236,74 @@ export default async function TagsPage({
             あと{remainingTagCount}個追加できます。
           </p>
         </form>
+
+        <section className="mt-10 rounded-2xl border border-blue-200 bg-blue-50 p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-950">
+                AIタグ候補
+              </h2>
+              <p className="mt-1 text-sm text-slate-600">
+                プロフィール内容に基づく候補です。採用したタグだけが保存されます。
+              </p>
+            </div>
+
+            <form action={generateProfileTagCandidatesAction}>
+              <button
+                type="submit"
+                disabled={remainingTagCount === 0}
+                className="rounded-xl bg-blue-700 px-5 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {candidates.length > 0
+                  ? '候補を再生成'
+                  : '候補を生成'}
+              </button>
+            </form>
+          </div>
+
+          {candidateBatch && candidates.length > 0 ? (
+            <form
+              action={adoptProfileTagCandidatesAction}
+              className="mt-5"
+            >
+              <input
+                type="hidden"
+                name="batchId"
+                value={candidateBatch.id}
+              />
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                {candidates.map((candidate) => (
+                  <label
+                    key={candidate.candidate_id}
+                    className="flex cursor-pointer items-start gap-3 rounded-xl border border-blue-200 bg-white p-4"
+                  >
+                    <input
+                      type="checkbox"
+                      name="candidateId"
+                      value={candidate.candidate_id}
+                      className="mt-1 h-4 w-4"
+                    />
+                    <span className="font-medium text-slate-900">
+                      {candidate.tag_text}
+                    </span>
+                  </label>
+                ))}
+              </div>
+
+              <button
+                type="submit"
+                className="mt-5 rounded-xl bg-slate-950 px-5 py-3 font-semibold text-white"
+              >
+                選択した候補を採用
+              </button>
+            </form>
+          ) : (
+            <p className="mt-5 text-sm text-slate-600">
+              まだ候補は生成されていません。
+            </p>
+          )}
+        </section>
 
         <section className="mt-10">
           <h2 className="text-lg font-semibold text-gray-900">

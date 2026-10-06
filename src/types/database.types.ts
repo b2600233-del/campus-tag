@@ -503,6 +503,19 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      get_my_revision_requests: {
+        Args: never
+        Returns: {
+          created_at: string
+          problematic_content_snapshot: string | null
+          request_id: string
+          status: string
+          target_field: string | null
+          target_tag_snapshot: string | null
+          updated_at: string
+          user_message: string | null
+        }[]
+      }
       get_public_profiles: {
         Args: { p_limit?: number; p_profile_ids?: string[] }
         Returns: {
