@@ -503,6 +503,15 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      create_my_profile_tag: {
+        Args: {
+          p_safety_reason_category?: string | null
+          p_safety_reason_summary?: string | null
+          p_safety_screening_status: string
+          p_tag_text: string
+        }
+        Returns: string
+      }
       get_my_revision_requests: {
         Args: never
         Returns: {

@@ -365,7 +365,7 @@ export async function saveProfileTagAction(
     )
   }
 
-  const { profile } = await getCurrentProfile()
+  const { supabase } = await getCurrentProfile()
 
   const safetyResult = await screenTagSafety(
     tagText
@@ -381,27 +381,15 @@ export async function saveProfileTagAction(
     )
   })
 
-  const admin = createAdminClient()
-
-  const { error: insertError } = await admin
-    .from('profile_tags')
-    .insert({
-      profile_id: profile.id,
-      tag_text: tagText,
-      source: 'user_added',
-      review_status:
-        safetyResult.status === 'passed'
-          ? 'clear'
-          : 'needs_editor_review',
-      safety_screening_status:
-        safetyResult.status,
-      safety_reason_category:
-        safetyResult.reasonCategory,
-      safety_reason_summary:
-        safetyResult.reasonSummary,
-      safety_checked_at:
-        new Date().toISOString(),
-    })
+  const { error: insertError } = await supabase.rpc(
+    'create_my_profile_tag',
+    {
+      p_tag_text: tagText,
+      p_safety_screening_status: safetyResult.status,
+      p_safety_reason_category: safetyResult.reasonCategory,
+      p_safety_reason_summary: safetyResult.reasonSummary,
+    },
+  )
 
   if (insertError) {
     if (insertError.code === '23505') {
