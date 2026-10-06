@@ -482,6 +482,15 @@ export type Database = {
       }
     }
     Functions: {
+      begin_ai_request: {
+        Args: { p_feature: string }
+        Returns: {
+          allowed: boolean
+          denial_reason: string | null
+          remaining: number | null
+          retry_after_seconds: number
+        }[]
+      }
       bootstrap_current_user: {
         Args: never
         Returns: {
@@ -539,6 +548,10 @@ export type Database = {
           student_type_other_text: string
           tags: string[]
         }[]
+      }
+      record_ai_success: {
+        Args: { p_feature: string }
+        Returns: undefined
       }
     }
     Enums: {

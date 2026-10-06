@@ -2,6 +2,10 @@
 
 import { redirect } from 'next/navigation'
 
+import {
+  AiUsageLimitError,
+  runTrackedAiRequest,
+} from '@/lib/ai/usage'
 import { screenTagSafety } from '@/lib/gemini/safety'
 import { generateTagCandidates } from '@/lib/gemini/tags'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -168,20 +172,26 @@ export async function generateProfileTagCandidatesAction() {
     )
   }
 
-  const candidates = await generateTagCandidates(
-    {
-      displayName: profileDetails.display_name,
-      studentType: profileDetails.student_type,
-      bio: profileDetails.bio,
-      languages: languageNames,
-      existingTags: currentTags,
-    },
-    remainingCount,
+  const candidates = await runTrackedAiRequest(
+    supabase,
+    'tag_generation',
+    () => generateTagCandidates(
+      {
+        displayName: profileDetails.display_name,
+        studentType: profileDetails.student_type,
+        bio: profileDetails.bio,
+        languages: languageNames,
+        existingTags: currentTags,
+      },
+      remainingCount,
+    ),
   ).catch((error: unknown) => {
     console.error('Tag candidate generation failed:', error)
     redirectFromTags(
       'error',
-      'AIタグ候補の生成に失敗しました。時間をおいて再度お試しください。',
+      error instanceof AiUsageLimitError
+        ? error.message
+        : 'AIタグ候補の生成に失敗しました。時間をおいて再度お試しください。',
     )
   })
 
@@ -240,7 +250,7 @@ export async function adoptProfileTagCandidatesAction(
     )
   }
 
-  const { user, profile } = await getCurrentProfile()
+  const { supabase, user, profile } = await getCurrentProfile()
   const admin = createAdminClient()
   const now = new Date().toISOString()
 
@@ -293,7 +303,11 @@ export async function adoptProfileTagCandidatesAction(
 
   const rows = await Promise.all(
     selected.map(async (candidate) => {
-      const safetyResult = await screenTagSafety(candidate.tag_text)
+      const safetyResult = await runTrackedAiRequest(
+        supabase,
+        'safety_screening',
+        () => screenTagSafety(candidate.tag_text),
+      )
 
       return {
         profile_id: profile.id,
@@ -367,8 +381,10 @@ export async function saveProfileTagAction(
 
   const { supabase } = await getCurrentProfile()
 
-  const safetyResult = await screenTagSafety(
-    tagText
+  const safetyResult = await runTrackedAiRequest(
+    supabase,
+    'safety_screening',
+    () => screenTagSafety(tagText),
   ).catch((error: unknown) => {
     console.error(
       'Tag safety screening failed:',

@@ -2,6 +2,10 @@
 
 import { parseSearchQuery } from '@/lib/gemini/search'
 import {
+  AiUsageLimitError,
+  runTrackedAiRequest,
+} from '@/lib/ai/usage'
+import {
   hasEffectiveSearchCriteria,
   matchPublicProfiles,
   type ProfileSearchResult,
@@ -278,15 +282,23 @@ export async function searchProfiles(
   let parsedQuery
 
   try {
-    parsedQuery =
-      await parseSearchQueryWithRetry(
-        normalizedQuery,
-      )
+    parsedQuery = await runTrackedAiRequest(
+      supabase,
+      'search',
+      () => parseSearchQueryWithRetry(normalizedQuery),
+    )
   } catch (error: unknown) {
     console.error(
       'Search query parsing failed:',
       error,
     )
+
+    if (error instanceof AiUsageLimitError) {
+      return {
+        ok: false,
+        error: error.message,
+      }
+    }
 
     if (isRetryableGeminiError(error)) {
       return {
