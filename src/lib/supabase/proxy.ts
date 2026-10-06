@@ -1,6 +1,58 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+const protectedPrefixes = [
+  '/account',
+  '/search',
+  '/profile',
+  '/editor',
+  '/admin',
+]
+
+const roleRank: Record<string, number> = {
+  viewer: 1,
+  editor: 2,
+  admin: 3,
+}
+
+function isProtectedPath(pathname: string) {
+  return (
+    pathname === '/' ||
+    protectedPrefixes.some(
+      (prefix) =>
+        pathname === prefix || pathname.startsWith(`${prefix}/`),
+    )
+  )
+}
+
+function getRequiredRole(pathname: string) {
+  if (pathname.startsWith('/admin/')) {
+    return 'admin'
+  }
+
+  if (pathname === '/editor' || pathname.startsWith('/editor/')) {
+    return 'editor'
+  }
+
+  return 'viewer'
+}
+
+function redirectWithSessionCookies(
+  request: NextRequest,
+  sessionResponse: NextResponse,
+  pathname: string,
+) {
+  const response = NextResponse.redirect(
+    new URL(pathname, request.url),
+  )
+
+  sessionResponse.cookies.getAll().forEach((cookie) => {
+    response.cookies.set(cookie)
+  })
+
+  return response
+}
+
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
@@ -32,7 +84,67 @@ export async function updateSession(request: NextRequest) {
     }
   )
 
-  await supabase.auth.getClaims()
+  const { data: claimsData } = await supabase.auth.getClaims()
+  const claims = claimsData?.claims
+
+  const pathname = request.nextUrl.pathname
+
+  if (!isProtectedPath(pathname)) {
+    return supabaseResponse
+  }
+
+  if (!claims?.sub) {
+    const nextPath = `${pathname}${request.nextUrl.search}`
+    const loginPath = `/login?next=${encodeURIComponent(nextPath)}`
+
+    return redirectWithSessionCookies(
+      request,
+      supabaseResponse,
+      loginPath,
+    )
+  }
+
+  const { data: appUser, error: appUserError } = await supabase
+    .from('app_users')
+    .select('role, account_status')
+    .eq('id', claims.sub)
+    .maybeSingle()
+
+  // Keep the page-level guard as the fallback if account loading fails.
+  if (appUserError || !appUser) {
+    return supabaseResponse
+  }
+
+  if (appUser.account_status === 'suspended') {
+    if (pathname !== '/account') {
+      return redirectWithSessionCookies(
+        request,
+        supabaseResponse,
+        '/account',
+      )
+    }
+
+    return supabaseResponse
+  }
+
+  if (appUser.account_status !== 'active') {
+    return redirectWithSessionCookies(
+      request,
+      supabaseResponse,
+      '/login?error=このCampus Tagアカウントは現在利用できません。',
+    )
+  }
+
+  const requiredRole = getRequiredRole(pathname)
+  const currentRank = roleRank[appUser.role] ?? 0
+
+  if (currentRank < roleRank[requiredRole]) {
+    return redirectWithSessionCookies(
+      request,
+      supabaseResponse,
+      '/account',
+    )
+  }
 
   return supabaseResponse
 }
