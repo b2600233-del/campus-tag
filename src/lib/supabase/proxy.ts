@@ -104,11 +104,10 @@ export async function updateSession(request: NextRequest) {
     )
   }
 
-  const { data: appUser, error: appUserError } = await supabase
-    .from('app_users')
-    .select('role, account_status')
-    .eq('id', claims.sub)
-    .maybeSingle()
+  const { data: routeAccess, error: appUserError } = await supabase
+    .rpc('get_my_route_access')
+
+  const appUser = routeAccess?.[0]
 
   // Keep the page-level guard as the fallback if account loading fails.
   if (appUserError || !appUser) {

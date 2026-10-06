@@ -534,6 +534,13 @@ export type Database = {
           user_message: string | null
         }[]
       }
+      get_my_route_access: {
+        Args: never
+        Returns: {
+          account_status: string
+          role: string
+        }[]
+      }
       get_public_profiles: {
         Args: { p_limit?: number; p_profile_ids?: string[] }
         Returns: {
